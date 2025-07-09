@@ -1,42 +1,49 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
 
-export default function AuthCallback() {
-  const router = useRouter()
+export default function AuthCallbackPage() {
+  const router = useRouter();
+  const { fetchUserProfile } = useAuth();
 
   useEffect(() => {
     const handleAuthCallback = async () => {
-      const { data, error } = await supabase.auth.getSession()
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error("Auth callback error:", error)
-        router.push("/login?error=auth_callback_failed")
-        return
+        if (error) {
+          console.error("Auth callback error:", error);
+          router.push("/login?error=auth_callback_failed");
+          return;
+        }
+
+        if (data.session) {
+          // Wait for profile to be created/fetched
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await fetchUserProfile();
+          router.push("/dashboard");
+        } else {
+          router.push("/login");
+        }
+      } catch (error) {
+        console.error("Unexpected error in auth callback:", error);
+        router.push("/login?error=unexpected_error");
       }
+    };
 
-      if (data.session) {
-        router.push("/dashboard")
-      } else {
-        router.push("/login")
-      }
-    }
-
-    handleAuthCallback()
-  }, [router])
+    handleAuthCallback();
+  }, [router, fetchUserProfile]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center animate-pulse">
-          <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-        </div>
-        <p className="text-gray-600">Hisobingizga kirilmoqda...</p>
+        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+        <p className="text-gray-600">Completing sign in...</p>
       </div>
     </div>
-  )
+  );
 }

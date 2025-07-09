@@ -1,16 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { stripe } from "@/lib/stripe";
 import { supabase } from "@/lib/supabase";
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2022-11-15",
-});
+import type Stripe from "stripe";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
@@ -19,30 +10,133 @@ export async function POST(request: NextRequest) {
     const body = await request.text();
     const signature = request.headers.get("stripe-signature")!;
 
-    const event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      webhookSecret
-    );
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (err: any) {
+      console.error("Webhook signature verification failed:", err.message);
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+    }
+
+    console.log("Stripe webhook event:", event.type);
 
     switch (event.type) {
       case "customer.subscription.created":
-      case "customer.subscription.updated":
-        await handleSubscriptionChange(
-          event.data.object as Stripe.Subscription
-        );
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+
+        // Get customer details
+        const customer = await stripe.customers.retrieve(customerId);
+        if (!customer || customer.deleted) {
+          console.error("Customer not found:", customerId);
+          break;
+        }
+
+        const customerEmail = (customer as Stripe.Customer).email;
+        if (!customerEmail) {
+          console.error("Customer email not found");
+          break;
+        }
+
+        // Update user subscription status
+        const { error } = await supabase
+          .from("users")
+          .update({
+            subscription_type: "pro",
+            subscription_status:
+              subscription.status === "active" ? "active" : "inactive",
+            stripe_subscription_id: subscription.id,
+            subscription_end_date: new Date(
+              subscription.items.data[0].current_period_end * 1000
+            ).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("email", customerEmail);
+
+        if (error) {
+          console.error("Error updating user subscription:", error);
+        } else {
+          console.log("User subscription updated successfully");
+        }
         break;
-      case "customer.subscription.deleted":
-        await handleSubscriptionCanceled(
-          event.data.object as Stripe.Subscription
-        );
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+
+        // Get customer details
+        const customer = await stripe.customers.retrieve(customerId);
+        if (!customer || customer.deleted) {
+          console.error("Customer not found:", customerId);
+          break;
+        }
+
+        const customerEmail = (customer as Stripe.Customer).email;
+        if (!customerEmail) {
+          console.error("Customer email not found");
+          break;
+        }
+
+        // Update user subscription status to canceled
+        const { error } = await supabase
+          .from("users")
+          .update({
+            subscription_type: "free",
+            subscription_status: "canceled",
+            subscription_end_date: new Date(
+              subscription.items.data[0].current_period_end * 1000
+            ).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("email", customerEmail);
+
+        if (error) {
+          console.error("Error canceling user subscription:", error);
+        } else {
+          console.log("User subscription canceled successfully");
+        }
         break;
-      case "invoice.payment_succeeded":
-        await handlePaymentSucceeded(event.data.object as Stripe.Invoice);
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+
+        // Get customer details
+        const customer = await stripe.customers.retrieve(customerId);
+        if (!customer || customer.deleted) {
+          console.error("Customer not found:", customerId);
+          break;
+        }
+
+        const customerEmail = (customer as Stripe.Customer).email;
+        if (!customerEmail) {
+          console.error("Customer email not found");
+          break;
+        }
+
+        // Update user subscription status to past_due
+        const { error } = await supabase
+          .from("users")
+          .update({
+            subscription_status: "past_due",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("email", customerEmail);
+
+        if (error) {
+          console.error("Error updating user payment status:", error);
+        } else {
+          console.log("User payment status updated to past_due");
+        }
         break;
-      case "invoice.payment_failed":
-        await handlePaymentFailed(event.data.object as Stripe.Invoice);
-        break;
+      }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
     }
 
     return NextResponse.json({ received: true });
@@ -50,104 +144,7 @@ export async function POST(request: NextRequest) {
     console.error("Webhook error:", error);
     return NextResponse.json(
       { error: "Webhook handler failed" },
-      { status: 400 }
+      { status: 500 }
     );
   }
-}
-
-async function handleSubscriptionChange(subscription: Stripe.Subscription) {
-  const customerId = subscription.customer as string;
-
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Supabase user fetch error:", error);
-    return;
-  }
-
-  if (!user) {
-    console.log("User not found for customer:", customerId);
-    return;
-  }
-
-  const subscriptionEndDate = subscription.cancel_at
-    ? new Date(subscription.cancel_at * 1000).toISOString()
-    : subscription.cancel_at_period_end
-      ? new Date(Number(subscription.cancel_at_period_end) * 1000).toISOString()
-      : null;
-
-  console.log("subscriptionEndDate", subscriptionEndDate);
-
-  // --- O'zgartirilgan qism ---
-  const priceId = subscription.items.data[0].price.id;
-  let subscriptionType = "free";
-
-  // .env fayldan PRO tarif IDlarini olamiz
-  const PRO_MONTHLY_PRICE_ID =
-    process.env.NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID;
-  const PRO_YEARLY_PRICE_ID =
-    process.env.NEXT_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID;
-
-  if (priceId === PRO_MONTHLY_PRICE_ID || priceId === PRO_YEARLY_PRICE_ID) {
-    subscriptionType = "pro";
-  }
-  // --- O'zgartirilgan qism tugadi ---
-
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({
-      subscription_type: subscriptionType, // Yangi aniqlangan subscriptionType ni ishlatamiz
-      subscription_status: subscription.status,
-      subscription_end_date: subscriptionEndDate,
-    })
-    .eq("id", user.id);
-
-  if (updateError) {
-    console.error("Supabase user update error:", updateError);
-  }
-}
-
-async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
-  const customerId = subscription.customer as string;
-
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Supabase user fetch error:", error);
-    return;
-  }
-
-  if (!user) {
-    console.log("User not found for customer:", customerId);
-    return;
-  }
-
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({
-      subscription_type: "free",
-      subscription_status: "canceled",
-      subscription_end_date: null,
-    })
-    .eq("id", user.id);
-
-  if (updateError) {
-    console.error("Supabase user update error:", updateError);
-  }
-}
-
-async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
-  console.log("Payment succeeded:", invoice.id);
-}
-
-async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  console.log("Payment failed:", invoice.id);
 }

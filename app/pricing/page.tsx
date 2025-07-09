@@ -15,7 +15,7 @@ import { BookOpen, Check, Star, Zap, Crown, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { createCheckoutSession, STRIPE_PRICES } from "@/lib/stripe";
+import { createCheckoutSession, STRIPE_PRICE_IDS } from "@/lib/stripe";
 import { useRouter } from "next/navigation";
 
 const features = {
@@ -42,7 +42,7 @@ export default function PricingPage() {
   const [isYearly, setIsYearly] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const { user } = useAuth();
-  const { isPro } = useSubscription();
+  const { isProUser } = useSubscription();
   const router = useRouter();
 
   const handleSubscribe = async (plan: "monthly" | "yearly") => {
@@ -55,8 +55,8 @@ export default function PricingPage() {
     try {
       const priceId =
         plan === "monthly"
-          ? STRIPE_PRICES.PRO_MONTHLY
-          : STRIPE_PRICES.PRO_YEARLY;
+          ? STRIPE_PRICE_IDS.pro_monthly
+          : STRIPE_PRICE_IDS.pro_yearly;
       const { sessionId } = await createCheckoutSession(priceId, user.id);
 
       const stripe = await import("@/lib/stripe").then((m) => m.stripePromise);
@@ -163,9 +163,9 @@ export default function PricingPage() {
               <Button
                 className="w-full bg-transparent"
                 variant="outline"
-                disabled={!isPro}
+                disabled={!isProUser()}
               >
-                {isPro ? "Joriy rejangiz" : "Bepul boshlash"}
+                {isProUser() ? "Joriy rejangiz" : "Bepul boshlash"}
               </Button>
             </CardContent>
           </Card>
@@ -209,15 +209,15 @@ export default function PricingPage() {
               <Button
                 className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
                 onClick={() => handleSubscribe(isYearly ? "yearly" : "monthly")}
-                disabled={loading !== null || isPro}
+                disabled={loading !== null || isProUser()}
               >
                 {loading
                   ? "Yuklanmoqda..."
-                  : isPro
+                  : isProUser()
                     ? "Faol rejangiz"
                     : "Pro rejani tanlash"}
               </Button>
-              {!isPro && (
+              {!isProUser() && (
                 <p className="text-xs text-gray-500 text-center mt-3">
                   Istalgan vaqt bekor qilish mumkin
                 </p>

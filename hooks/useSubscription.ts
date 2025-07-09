@@ -1,62 +1,180 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase, type User } from "@/lib/supabase";
+import { create } from "zustand";
 import { useAuth } from "./useAuth";
 
-export function useSubscription() {
-  const { user } = useAuth();
-  const [userProfile, setUserProfile] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+interface SubscriptionLimits {
+  subjects: number;
+  assignments: number;
+  studySessions: number;
+  goals: number;
+  attachments: number;
+  attachmentSizeMB: number;
+}
 
-  useEffect(() => {
-    if (user) {
-      fetchUserProfile();
-    } else {
-      setUserProfile(null);
-      setLoading(false);
-    }
-  }, [user]);
+interface UsageStats {
+  subjects: number;
+  assignments: number;
+  studySessions: number;
+  goals: number;
+  attachments: number;
+  attachmentSizeMB: number;
+}
 
-  const fetchUserProfile = async () => {
+interface SubscriptionState {
+  user: any;
+  loading: boolean;
+  limits: SubscriptionLimits;
+  usage: UsageStats;
+  isPro: boolean;
+  isProUser: () => boolean;
+  getUsagePercentage: (type: keyof UsageStats) => number;
+  canAddMoreSubjects: () => Promise<boolean>;
+  canAddMoreAssignments: () => Promise<boolean>;
+  canAddMoreStudySessions: () => Promise<boolean>;
+  canAddMoreGoals: () => Promise<boolean>;
+  canUploadAttachment: (sizeMB: number) => Promise<boolean>;
+  refreshUsage: () => void;
+  fetchUsage: () => Promise<void>;
+}
+
+const FREE_LIMITS: SubscriptionLimits = {
+  subjects: 5,
+  assignments: 20,
+  studySessions: 10,
+  goals: 3,
+  attachments: 5,
+  attachmentSizeMB: 5,
+};
+
+const PRO_LIMITS: SubscriptionLimits = {
+  subjects: 50,
+  assignments: 500,
+  studySessions: 1000,
+  goals: 50,
+  attachments: 100,
+  attachmentSizeMB: 100,
+};
+
+export const useSubscription = create<SubscriptionState>((set, get) => ({
+  user: null,
+  loading: false,
+  limits: FREE_LIMITS,
+  usage: {
+    subjects: 0,
+    assignments: 0,
+    studySessions: 0,
+    goals: 0,
+    attachments: 0,
+    attachmentSizeMB: 0,
+  },
+  isPro: false,
+
+  isProUser: () => {
+    const { user } = get();
+    return (
+      user?.subscription_type === "pro" &&
+      user?.subscription_status === "active"
+    );
+  },
+
+  getUsagePercentage: (type: keyof UsageStats) => {
+    const { usage, limits } = get();
+    const usageValue = usage[type];
+    const limitValue = limits[type];
+    return limitValue > 0 ? Math.round((usageValue / limitValue) * 100) : 0;
+  },
+
+  canAddMoreSubjects: async () => {
+    const { limits, usage } = get();
+    return usage.subjects < limits.subjects;
+  },
+
+  canAddMoreAssignments: async () => {
+    const { limits, usage } = get();
+    return usage.assignments < limits.assignments;
+  },
+
+  canAddMoreStudySessions: async () => {
+    const { limits, usage } = get();
+    return usage.studySessions < limits.studySessions;
+  },
+
+  canAddMoreGoals: async () => {
+    const { limits, usage } = get();
+    return usage.goals < limits.goals;
+  },
+
+  canUploadAttachment: async (sizeMB: number) => {
+    const { limits, usage } = get();
+    return (
+      usage.attachments < limits.attachments &&
+      sizeMB <= limits.attachmentSizeMB
+    );
+  },
+
+  fetchUsage: async () => {
+    const authState = useAuth.getState();
+    const user = authState.user;
+
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (error) throw error;
-      setUserProfile(data);
+      // Fetch actual usage from API or calculate from user data
+      // For now, we'll use placeholder values
+      set({
+        usage: {
+          subjects: 0,
+          assignments: 0,
+          studySessions: 0,
+          goals: 0,
+          attachments: 0,
+          attachmentSizeMB: 0,
+        },
+      });
     } catch (error) {
-      console.error("Error fetching user profile:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error fetching usage:", error);
     }
-  };
+  },
 
-  const isPro =
-    userProfile?.subscription_type === "pro" &&
-    userProfile?.subscription_status === "active";
+  refreshUsage: () => {
+    const authState = useAuth.getState();
+    const user = authState.user;
 
-  const canAddMoreSubjects = async () => {
-    if (isPro) return true;
+    if (user) {
+      const isPro =
+        user.subscription_type === "pro" &&
+        user.subscription_status === "active";
 
-    const { count } = await supabase
-      .from("subjects")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user?.id);
+      set({
+        user,
+        isPro,
+        limits: isPro ? PRO_LIMITS : FREE_LIMITS,
+      });
 
-    return (count || 0) < 3;
-  };
+      // Fetch current usage
+      get().fetchUsage();
+    }
+  },
+}));
 
-  return {
-    userProfile,
-    loading,
-    isPro,
-    canAddMoreSubjects,
-    refetch: fetchUserProfile,
-  };
-}
+// Initialize subscription state when auth changes
+useAuth.subscribe((state) => {
+  const subscriptionState = useSubscription.getState();
+  if (state.user) {
+    const isPro =
+      state.user.subscription_type === "pro" &&
+      state.user.subscription_status === "active";
+
+    useSubscription.setState({
+      user: state.user,
+      isPro,
+      limits: isPro ? PRO_LIMITS : FREE_LIMITS,
+    });
+
+    // Refresh usage data
+    subscriptionState.refreshUsage();
+  }
+});
+
+

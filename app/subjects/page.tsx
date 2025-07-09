@@ -1,12 +1,18 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { BookOpen, Plus, Search, Edit, Trash2, Calendar } from "lucide-react"
-import Link from "next/link"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { BookOpen, Plus, Search, Edit, Trash2, Calendar } from "lucide-react";
+import Link from "next/link";
 
 // Mock data
 const mockSubjects = [
@@ -37,17 +43,19 @@ const mockSubjects = [
     description: "Falsafa tarixi va mantiq",
     createdAt: "2024-01-03",
   },
-]
+];
 
 export default function SubjectsPage() {
-  const [subjects, setSubjects] = useState(mockSubjects)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [subjects, setSubjects] = useState(mockSubjects);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredSubjects = subjects.filter((subject) => subject.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredSubjects = subjects.filter((subject) =>
+    subject.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const deleteSubject = (id: number) => {
-    setSubjects((prev) => prev.filter((subject) => subject.id !== id))
-  }
+    setSubjects((prev) => prev.filter((subject) => subject.id !== id));
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -111,12 +119,17 @@ export default function SubjectsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Jami Topshiriqlar</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Jami Topshiriqlar
+              </CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {subjects.reduce((total, subject) => total + subject.assignments, 0)}
+                {subjects.reduce(
+                  (total, subject) => total + subject.assignments,
+                  0
+                )}
               </div>
             </CardContent>
           </Card>
@@ -128,7 +141,10 @@ export default function SubjectsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {subjects.reduce((total, subject) => total + subject.completedAssignments, 0)}
+                {subjects.reduce(
+                  (total, subject) => total + subject.completedAssignments,
+                  0
+                )}
               </div>
             </CardContent>
           </Card>
@@ -143,7 +159,9 @@ export default function SubjectsPage() {
                 {searchTerm ? "Fan topilmadi" : "Hali fan qo'shilmagan"}
               </h3>
               <p className="text-gray-500 mb-4">
-                {searchTerm ? "Qidiruv so'zingizni o'zgartiring" : "Birinchi faningizni qo'shish uchun tugmani bosing"}
+                {searchTerm
+                  ? "Qidiruv so'zingizni o'zgartiring"
+                  : "Birinchi faningizni qo'shish uchun tugmani bosing"}
               </p>
               {!searchTerm && (
                 <Link href="/subjects/new">
@@ -158,11 +176,16 @@ export default function SubjectsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSubjects.map((subject) => (
-              <Card key={subject.id} className="hover:shadow-lg transition-shadow">
+              <Card
+                key={subject.id}
+                className="hover:shadow-lg transition-shadow"
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className={`w-4 h-4 rounded-full ${subject.color}`}></div>
+                      <div
+                        className={`w-4 h-4 rounded-full ${subject.color}`}
+                      ></div>
                       <CardTitle className="text-lg">{subject.name}</CardTitle>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -186,7 +209,9 @@ export default function SubjectsPage() {
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Topshiriqlar</span>
+                      <span className="text-sm text-gray-600">
+                        Topshiriqlar
+                      </span>
                       <Badge variant="secondary">
                         {subject.completedAssignments}/{subject.assignments}
                       </Badge>
@@ -222,5 +247,5 @@ export default function SubjectsPage() {
         )}
       </div>
     </div>
-  )
+  );
 }
