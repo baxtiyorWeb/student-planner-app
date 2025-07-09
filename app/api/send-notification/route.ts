@@ -2,13 +2,14 @@ import { type NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend(process.env.RESEND_API_KEY || 
+  "re_2CASf3S3_12yno3HLnPF4kHEtKhaa4vy5"
+);
 
 export async function POST(request: NextRequest) {
   try {
     const { userId, type, assignmentId } = await request.json();
 
-    // Get user and assignment details
     const { data: user } = await supabase
       .from("users")
       .select("*")
